@@ -1,0 +1,103 @@
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de entorno
+.env
+.env.*.local
+
+# Node
+node_modules/
+dist/
+build/
+.tmp/
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Java
+target/
+*.class
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# JetBrains
+.idea/
+*.iml
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln
+bin/
+obj/
+
+# Archivos temporales editores
+*~
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Cobertura y reportes
+coverage/
+coverage.*
+
+# Composer / PHP
+/vendor/
+composer.lock
+
+# Go
+bin/
+pkg/
+*.exe
+
+# Ruby
+.bundle/
+vendor/bundle/
+*.gem
+*.rbc
+
+# Otros
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.env
+node_modules/
+
+# Ignorar archivos creados por el sistema de compilación
+dist/
+build/
+
+*.pdf
+*.csv
+*.xlsx
+*.txt
+# End of file
