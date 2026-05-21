@@ -34,10 +34,12 @@ PROB_VISITAR_SECTOR = {
 TIEMPO_DE_TRASLADO = 10
 
 # Cantidad de cajas por tipo: autoservicio (a), preferencial (p), normal (n)
-CAJAS_POR_TIPO = {"auto": 4, "preferential": 1, "normal": 3}
+CAJAS_POR_TIPO = {"auto": 4, "preferencial": 1, "normal": 3}
 
 # Límite de ítems para usar autoservicio
 LIMITE_CAJA_AUTO = 30
+
+CLIENTE_ORDEN = {"P": 1, "N": 2}
 
 # Tasas de llegada por hora (esperadas por hora) por tipo de cliente
 # Clave: hora de inicio del bloque (entero, 24h). Valores: 'P' = preferente, 'N' = normal
@@ -66,5 +68,3 @@ def tasa_llegada_por_hora(hora: int, tipo: str) -> float:
     if tipos is None:
         return 0.0
     return float(tipos.get(tipo.upper(), 0.0))
-
-
