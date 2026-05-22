@@ -21,13 +21,20 @@ class Cliente:
         Cliente.id += 1
 
         self.hora_llegada = env.now
+        self.tiempo_espera_caja = None
         self.hora_salida = None
+
+        self.tiempo_de_permanencia = None
 
         self.estado = None  # "en_cola", "siendo_atendido", "terminado"
         self.sector_actual = None
 
         self.sectores_a_visitar = []
         self.cantidad_items = 0
+        self.utilidad = 0
+        self.tiempo_espera_sector = {"almacen": 0.0, "verduleria": 0.0,
+                                     "panaderia": 0.0, "refrigerados": 0.0}
+        self.tiempo_espera_balanza = {"verduleria": 0.0, "panaderia": 0.0}
 
         self.nivel_prioridad = CLIENTE_ORDEN[tipo]
 
@@ -42,6 +49,9 @@ class Sector:
             env, init=capacidad_items, capacity=capacidad_items)
         self.balanzas = simpy.Resource(
             env, capacity=balanzas) if balanzas > 0 else None
+        self.solicitud_de_reponer = False
+
+        self.cantidad_de_productos = []
 
     # Cliente espacio (request/release)
     def request_espacio(self):
@@ -61,10 +71,11 @@ class Sector:
 
     def reponer_items(self, cantidad: int):
         """Devuelve el evento para reponer ítems al stock."""
+
         return self.stock.put(cantidad)
 
-    def cuanto_stock(self) -> int:
-        return int(self.stock.level)
+    def cuanto_stock(self) -> float:
+        return float(self.stock.level)
 
     # Balanzas (si aplica)
     def request_balanza(self):
@@ -110,6 +121,12 @@ class Supermercado:
                                      for _ in range(CAJAS_POR_TIPO["preferencial"])]
         self.cajas_normales = [simpy.PriorityResource(env, capacity=1)
                                for _ in range(CAJAS_POR_TIPO["normal"])]
+        self.reponedores = [Reponedor(self.env), Reponedor(self.env)]
+        self.ordenes_reponedores = simpy.Resource(
+            env, capacity=len(self.reponedores))
+        self.tiempo_espera_caja_auto = []
+        self.tiempo_espera_caja_preferencial = []
+        self.tiempo_espera_caja_normal = []
 
     def entrar(self, cliente: Cliente) -> bool:
         if self.clientes_en_tienda >= self.capacidad_maxima:
@@ -131,6 +148,9 @@ class Supermercado:
 
     def request_caja_normal(self, idx: int, cliente: Cliente):
         return self.cajas_normales[idx].request(priority=cliente.nivel_prioridad)
+
+    def request_reponedor(self):
+        return self.ordenes_reponedores.request()
 
     def _cola_len(self, recurso: simpy.resources.resource.Resource) -> int:
         return len(recurso.queue) + getattr(recurso, 'count', 0)
@@ -190,3 +210,15 @@ class Supermercado:
                     return cajas_normales[idx]
                 else:
                     return mejores[0]
+
+
+class Reponedor:
+    id = 1
+
+    def __init__(self, env: simpy.Environment):
+        self.env = env
+        self.id_reponedor = Reponedor.id
+        Reponedor.id += 1
+        self.estado = "descansando"  # "reponiendo", "descansando"
+        self.sector_actual = None
+        self.cantidad_items = 0

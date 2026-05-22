@@ -1,4 +1,4 @@
-SECTOR = ["almacen", "verduleria", "panaderia", "refrigerados"]
+SECTOR = ["verduleria", "panaderia", "almacen", "refrigerados"]
 
 # Capacidad total del sistema
 C_MAX = 200
