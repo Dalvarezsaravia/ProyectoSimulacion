@@ -39,7 +39,7 @@ class Simulacion:
         dia = int(self.env.now // 24) + 1
         hora = int(self.env.now % 24)
         minutos = int((self.env.now % 1) * 60)
-        segundos = int((self.env.now * 60) % 60)
+        segundos = int((self.env.now * 3600) % 60)
         linea = f" [Dia {dia:02d} Hora {hora:02d}:{minutos:02d}:{segundos:02d}] {mensaje}"
         if self.activar_logs and self.log_file is not None:
             self.log_file.write(linea + "\n")
@@ -64,7 +64,7 @@ class Simulacion:
             yield self.env.timeout(tiempo_entre_llegadas)
     
             # Evita crear clientes si la llegada ocurrió después del cierre
-            if self.env.now > self.hora_cierre:
+            if self.env.now >= self.hora_cierre:
                 break
     
             cliente_n = Cliente(self.env, "N")
@@ -83,7 +83,7 @@ class Simulacion:
             yield self.env.timeout(tiempo_entre_llegadas)
     
             # Evita crear clientes si la llegada ocurrió después del cierre
-            if self.env.now > self.hora_cierre:
+            if self.env.now >= self.hora_cierre:
                 break
     
             cliente_p = Cliente(self.env, "P")
@@ -165,43 +165,71 @@ class Simulacion:
                 tiempo_llegada_al_sector = self.env.now
                 with self.verduleria.request_espacio() as req:
                     yield req
-                    cliente.tiempo_espera_sector["verduleria"] = self.env.now - \
-                        tiempo_llegada_al_sector
+                    cliente.tiempo_espera_sector["verduleria"] = (
+                        self.env.now - tiempo_llegada_al_sector
+                    )
                     cliente.sector_actual = "verduleria"
+
                     self.registrar_evento(
-                        f"Cliente {cliente.id_cliente} ({cliente.tipo}) ingresó al sector Verdulería.")
+                        f"Cliente {cliente.id_cliente} ({cliente.tipo}) ingresó al sector Verdulería."
+                    )
+
                     tiempo_espera = self.rng.gamma(shape=4, scale=3) / 60
                     yield self.env.timeout(tiempo_espera)
-                    cantidad_deseada = self.rng.negative_binomial(n=4, p=0.25)
-                    
+
+                    cantidad_deseada = self.rng.binomial(n=10, p=0.4)
+
                     cantidad_items = self.calcular_cantidad_real_a_comprar(
-                        self.almacen,
+                        self.verduleria,
                         cantidad_deseada
                     )
-                    
+
                     if cantidad_items > 0:
-                        yield self.almacen.sacar_items(cantidad_items)
-                    
-                    self.almacen.cantidad_de_productos.append(
-                        (self.env.now, float(self.almacen.cuanto_stock()))
+                        yield self.verduleria.sacar_items(cantidad_items)
+
+                    self.verduleria.cantidad_de_productos.append(
+                        (self.env.now, float(self.verduleria.cuanto_stock()))
                     )
-                    
+
+                    if cantidad_items > 0:
+                        tiempo_llegada_a_balanza = self.env.now
+
+                        with self.verduleria.request_balanza() as req_balanza:
+                            yield req_balanza
+
+                            cliente.tiempo_espera_balanza["verduleria"] = (
+                                self.env.now - tiempo_llegada_a_balanza
+                            )
+
+                            for _ in range(cantidad_items):
+                                tiempo_en_balanza = self.rng.triangular(
+                                    left=10,
+                                    mode=20,
+                                    right=30
+                                ) / 3600
+                                yield self.env.timeout(tiempo_en_balanza)
+
+                            self.registrar_evento(
+                                f"Cliente {cliente.id_cliente} ({cliente.tipo}) terminó de pesar en Verdulería."
+                            )
+
+                        utilidad = 0
+                        for _ in range(cantidad_items):
+                            utilidad += self.rng.triangular(20, 150, 300)
+                        cliente.utilidad += utilidad
+
                     cliente.cantidad_items += cantidad_items
-                    
-                    utilidad = 0
-                    for _ in range(cantidad_items):
-                        utilidad += self.rng.uniform(150, 650)
-                    cliente.utilidad += utilidad
-                    
+
                     if cantidad_items < cantidad_deseada:
                         self.registrar_evento(
-                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) quiso comprar {cantidad_deseada} ítems en Almacén, pero solo pudo sacar {cantidad_items}. Disponibilidad actual: {self.almacen.cuanto_stock():.4f}."
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) quiso comprar {cantidad_deseada} ítems en Verdulería, pero solo pudo sacar {cantidad_items}. Disponibilidad actual: {self.verduleria.cuanto_stock():.4f}."
                         )
                     else:
                         self.registrar_evento(
-                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Almacén con {cantidad_items} ítems. Disponibilidad actual: {self.almacen.cuanto_stock():.4f}."
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Verdulería con {cantidad_items} ítems. Disponibilidad actual: {self.verduleria.cuanto_stock():.4f}."
                         )
 
+            
             elif sector == "panaderia":
                 tiempo_llegada_al_sector = self.env.now
                 with self.panaderia.request_espacio() as req:
