@@ -80,7 +80,7 @@ class Sector:
     # Balanzas (si aplica)
     def request_balanza(self):
         if self.balanzas is None:
-            raise RuntimeError(f"Sector {self.name} no tiene balanzas")
+            raise RuntimeError(f"Sector {self.nombre} no tiene balanzas")
         return self.balanzas.request()
 
 
@@ -122,8 +122,13 @@ class Supermercado:
         self.cajas_normales = [simpy.PriorityResource(env, capacity=1)
                                for _ in range(CAJAS_POR_TIPO["normal"])]
         self.reponedores = [Reponedor(self.env), Reponedor(self.env)]
-        self.ordenes_reponedores = simpy.Resource(
-            env, capacity=len(self.reponedores))
+        
+        self.reponedores_disponibles = simpy.Store(
+            env, capacity=len(self.reponedores)
+        )
+        
+        for reponedor in self.reponedores:
+            self.reponedores_disponibles.put(reponedor)
         self.tiempo_espera_caja_auto = []
         self.tiempo_espera_caja_preferencial = []
         self.tiempo_espera_caja_normal = []
@@ -150,7 +155,10 @@ class Supermercado:
         return self.cajas_normales[idx].request(priority=cliente.nivel_prioridad)
 
     def request_reponedor(self):
-        return self.ordenes_reponedores.request()
+        return self.reponedores_disponibles.get()
+    
+    def devolver_reponedor(self, reponedor):
+        return self.reponedores_disponibles.put(reponedor)
 
     def _cola_len(self, recurso: simpy.resources.resource.Resource) -> int:
         return len(recurso.queue) + getattr(recurso, 'count', 0)
