@@ -458,35 +458,35 @@ class Simulacion:
             self.registrar_evento(
                 f"Reponedor {reponedor.id_reponedor} terminó de reponer el sector {sector.nombre}. Cantidad repuesta: {cantidad_a_reponer}. Stock actual: {sector.cuanto_stock():.4f}.")
 
-        def calcular_producto_promedio(self, sector: Sector):
-            historial = sorted(sector.cantidad_de_productos, key=lambda x: x[0])
-        
-            inicio = self.hora_inicio
-            cierre = self.hora_cierre
-        
-            area_total = 0.0
-            tiempo_anterior = inicio
-        
-            # Al inicio del día se asume stock lleno
-            nivel_anterior = float(sector.stock.capacity)
-        
-            for tiempo, nivel in historial:
-                if tiempo < inicio:
-                    continue
-        
-                if tiempo > cierre:
-                    break
-        
-                tiempo_transcurrido = tiempo - tiempo_anterior
-                area_total += nivel_anterior * tiempo_transcurrido
-        
-                tiempo_anterior = tiempo
-                nivel_anterior = nivel
-        
-            if tiempo_anterior < cierre:
-                area_total += nivel_anterior * (cierre - tiempo_anterior)
-        
-            return area_total / (cierre - inicio)
+    def calcular_producto_promedio(self, sector: Sector):
+        historial = sorted(sector.cantidad_de_productos, key=lambda x: x[0])
+    
+        inicio = self.hora_inicio
+        cierre = self.hora_cierre
+    
+        area_total = 0.0
+        tiempo_anterior = inicio
+    
+        # Al inicio del día se asume stock lleno
+        nivel_anterior = float(sector.stock.capacity)
+    
+        for tiempo, nivel in historial:
+            if tiempo < inicio:
+                continue
+    
+            if tiempo > cierre:
+                break
+    
+            tiempo_transcurrido = tiempo - tiempo_anterior
+            area_total += nivel_anterior * tiempo_transcurrido
+    
+            tiempo_anterior = tiempo
+            nivel_anterior = nivel
+    
+        if tiempo_anterior < cierre:
+            area_total += nivel_anterior * (cierre - tiempo_anterior)
+    
+        return area_total / (cierre - inicio)
 
     def recolectar_estadisticas(self):
         # Aquí se pueden recolectar estadísticas al finalizar la simulación
