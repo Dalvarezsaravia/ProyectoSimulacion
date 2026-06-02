@@ -101,6 +101,10 @@ class Simulacion:
                             f"Stock del sector {sector.nombre} bajo. Cantidad: {sector.cuanto_stock():.4f}. Reponiendo...")
                         self.env.process(self.solicitud_reponedor(sector))
 
+    def calcular_cantidad_real_a_comprar(self, sector: Sector, cantidad_deseada: int) -> int:
+        stock_disponible = int(sector.cuanto_stock())
+        return max(0, min(int(cantidad_deseada), stock_disponible))
+    
     def procesar_persona(self, cliente: Cliente):
         if not self.supermercado.entrar(cliente):
             self.registrar_evento(
@@ -127,20 +131,35 @@ class Simulacion:
                     tiempo_espera = self.rng.lognormal(
                         mean=2.6, sigma=0.5) / 60
                     yield self.env.timeout(tiempo_espera)
-                    cantidad_items = self.rng.negative_binomial(n=4, p=0.25)
-
-                    if cantidad_items >= 1:
+                    cantidad_deseada = self.rng.negative_binomial(n=4, p=0.25)
+                    
+                    cantidad_items = self.calcular_cantidad_real_a_comprar(
+                        self.almacen,
+                        cantidad_deseada
+                    )
+                    
+                    if cantidad_items > 0:
                         yield self.almacen.sacar_items(cantidad_items)
-                        self.almacen.cantidad_de_productos.append(
-                            (self.env.now, float(self.almacen.cuanto_stock())))
-                        cliente.cantidad_items += cantidad_items
-
-                        utilidad = 0
-                        for _ in range(cantidad_items):
-                            utilidad += self.rng.uniform(150, 650)
-                        cliente.utilidad += utilidad
-                    self.registrar_evento(
-                        f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Almacén con {cantidad_items} ítems. Disponibilidad actual: {self.almacen.cuanto_stock():.4f}.")
+                    
+                    self.almacen.cantidad_de_productos.append(
+                        (self.env.now, float(self.almacen.cuanto_stock()))
+                    )
+                    
+                    cliente.cantidad_items += cantidad_items
+                    
+                    utilidad = 0
+                    for _ in range(cantidad_items):
+                        utilidad += self.rng.uniform(150, 650)
+                    cliente.utilidad += utilidad
+                    
+                    if cantidad_items < cantidad_deseada:
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) quiso comprar {cantidad_deseada} ítems en Almacén, pero solo pudo sacar {cantidad_items}. Disponibilidad actual: {self.almacen.cuanto_stock():.4f}."
+                        )
+                    else:
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Almacén con {cantidad_items} ítems. Disponibilidad actual: {self.almacen.cuanto_stock():.4f}."
+                        )
 
             elif sector == "verduleria":
                 tiempo_llegada_al_sector = self.env.now
@@ -153,31 +172,35 @@ class Simulacion:
                         f"Cliente {cliente.id_cliente} ({cliente.tipo}) ingresó al sector Verdulería.")
                     tiempo_espera = self.rng.gamma(shape=4, scale=3) / 60
                     yield self.env.timeout(tiempo_espera)
-                    cantidad_items = self.rng.binomial(n=10, p=0.4)
-                    if cantidad_items >= 1:
-                        yield self.verduleria.sacar_items(cantidad_items)
-                        self.verduleria.cantidad_de_productos.append(
-                            (self.env.now, float(self.verduleria.cuanto_stock())))
-                        tiempo_llegada_a_balanza = self.env.now
-                        with self.verduleria.request_balanza() as req_balanza:
-                            yield req_balanza
-                            cliente.tiempo_espera_balanza["verduleria"] = self.env.now - \
-                                tiempo_llegada_a_balanza
-                            for _ in range(cantidad_items):
-                                tiempo_en_balanza = self.rng.triangular(
-                                    left=10, mode=20, right=30) / 3600
-                                yield self.env.timeout(tiempo_en_balanza)
-                            self.registrar_evento(
-                                f"Cliente {cliente.id_cliente} ({cliente.tipo}) terminó de pesar en Verdulería.")
-
-                        utilidad = 0
-                        for _ in range(cantidad_items):
-                            utilidad += self.rng.triangular(20, 150, 300)
-                        cliente.utilidad += utilidad
-
-                    self.registrar_evento(
-                        f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Verdulería con {cantidad_items} ítems. Disponibilidad actual: {self.verduleria.cuanto_stock():.4f}.")
+                    cantidad_deseada = self.rng.negative_binomial(n=4, p=0.25)
+                    
+                    cantidad_items = self.calcular_cantidad_real_a_comprar(
+                        self.almacen,
+                        cantidad_deseada
+                    )
+                    
+                    if cantidad_items > 0:
+                        yield self.almacen.sacar_items(cantidad_items)
+                    
+                    self.almacen.cantidad_de_productos.append(
+                        (self.env.now, float(self.almacen.cuanto_stock()))
+                    )
+                    
                     cliente.cantidad_items += cantidad_items
+                    
+                    utilidad = 0
+                    for _ in range(cantidad_items):
+                        utilidad += self.rng.uniform(150, 650)
+                    cliente.utilidad += utilidad
+                    
+                    if cantidad_items < cantidad_deseada:
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) quiso comprar {cantidad_deseada} ítems en Almacén, pero solo pudo sacar {cantidad_items}. Disponibilidad actual: {self.almacen.cuanto_stock():.4f}."
+                        )
+                    else:
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Almacén con {cantidad_items} ítems. Disponibilidad actual: {self.almacen.cuanto_stock():.4f}."
+                        )
 
             elif sector == "panaderia":
                 tiempo_llegada_al_sector = self.env.now
@@ -191,30 +214,60 @@ class Simulacion:
                     tiempo_espera = self.rng.triangular(
                         left=3, mode=5, right=10) / 60
                     yield self.env.timeout(tiempo_espera)
-                    cantidad_items = self.rng.poisson(lam=2) + 1
-                    yield self.panaderia.sacar_items(cantidad_items)
+                    cantidad_deseada = self.rng.poisson(lam=2) + 1
+                    
+                    cantidad_items = self.calcular_cantidad_real_a_comprar(
+                        self.panaderia,
+                        cantidad_deseada
+                    )
+                    
+                    if cantidad_items > 0:
+                        yield self.panaderia.sacar_items(cantidad_items)
+                    
                     self.panaderia.cantidad_de_productos.append(
-                        (self.env.now, float(self.panaderia.cuanto_stock())))
-                    tiempo_llegada_a_balanza = self.env.now
-                    with self.panaderia.request_balanza() as req_balanza:
-                        yield req_balanza
-                        cliente.tiempo_espera_balanza["panaderia"] = self.env.now - \
-                            tiempo_llegada_a_balanza
-                        for _ in range(cantidad_items):
-                            tiempo_en_balanza = self.rng.triangular(
-                                left=10, mode=20, right=30) / 3600
-                            yield self.env.timeout(tiempo_en_balanza)
-                        self.registrar_evento(
-                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) terminó de pesar en Panadería.")
-                    self.registrar_evento(
-                        f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Panadería con {cantidad_items} ítems. Disponibilidad actual: {self.panaderia.cuanto_stock():.4f}.")
+                        (self.env.now, float(self.panaderia.cuanto_stock()))
+                    )
+                    
+                    if cantidad_items > 0:
+                        tiempo_llegada_a_balanza = self.env.now
+                    
+                        with self.panaderia.request_balanza() as req_balanza:
+                            yield req_balanza
+                    
+                            cliente.tiempo_espera_balanza["panaderia"] = (
+                                self.env.now - tiempo_llegada_a_balanza
+                            )
+                    
+                            for _ in range(cantidad_items):
+                                tiempo_en_balanza = self.rng.triangular(
+                                    left=10,
+                                    mode=20,
+                                    right=30
+                                ) / 3600
+                                yield self.env.timeout(tiempo_en_balanza)
+                    
+                            self.registrar_evento(
+                                f"Cliente {cliente.id_cliente} ({cliente.tipo}) terminó de pesar en Panadería."
+                            )
+                    
                     cliente.cantidad_items += cantidad_items
-
+                    
                     utilidad = 0
                     for _ in range(cantidad_items):
-                        utilidad += self.rng.lognormal(mean=6.0191,
-                                                       sigma=0.4245)
+                        utilidad += self.rng.lognormal(
+                            mean=6.0191,
+                            sigma=0.4245
+                        )
                     cliente.utilidad += utilidad
+                    
+                    if cantidad_items < cantidad_deseada:
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) quiso comprar {cantidad_deseada} ítems en Panadería, pero solo pudo sacar {cantidad_items}. Disponibilidad actual: {self.panaderia.cuanto_stock():.4f}."
+                        )
+                    else:
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Panadería con {cantidad_items} ítems. Disponibilidad actual: {self.panaderia.cuanto_stock():.4f}."
+                        )
 
             elif sector == "refrigerados":
                 tiempo_llegada_al_sector = self.env.now
@@ -227,12 +280,28 @@ class Simulacion:
                         f"Cliente {cliente.id_cliente} ({cliente.tipo}) ingresó al sector Refrigerados.")
                     tiempo_espera = self.rng.weibull(a=2) * 10 / 60
                     yield self.env.timeout(tiempo_espera)
-                    cantidad_items = self.rng.poisson(lam=5) + 1
-                    yield self.refrigerados.sacar_items(cantidad_items)
+                    cantidad_deseada = self.rng.poisson(lam=5) + 1
+                    cantidad_items = self.calcular_cantidad_real_a_comprar(
+                        self.refrigerados,
+                        cantidad_deseada
+                    )
+                    
+                    if cantidad_items > 0:
+                        yield self.refrigerados.sacar_items(cantidad_items)
+                    
                     self.refrigerados.cantidad_de_productos.append(
-                        (self.env.now, float(self.refrigerados.cuanto_stock())))
-                    self.registrar_evento(
-                        f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Refrigerados con {cantidad_items} ítems. Disponibilidad actual: {self.refrigerados.cuanto_stock():.4f}.")
+                        (self.env.now, float(self.refrigerados.cuanto_stock()))
+                    )
+                    
+                    if cantidad_items < cantidad_deseada:
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) quiso comprar {cantidad_deseada} ítems en Refrigerados, pero solo pudo sacar {cantidad_items}. Disponibilidad actual: {self.refrigerados.cuanto_stock():.4f}."
+                        )
+                    else:
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Refrigerados con {cantidad_items} ítems. Disponibilidad actual: {self.refrigerados.cuanto_stock():.4f}."
+                        )
+                    
                     cliente.cantidad_items += cantidad_items
 
                     utilidad = 0
