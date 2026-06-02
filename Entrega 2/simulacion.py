@@ -3,13 +3,15 @@ import numpy as np
 from pathlib import Path
 from parametros import tasa_llegada_por_hora
 from clases import Cliente, Almacen, Reponedor, Sector, Verduleria, Panaderia, Refrigerados, Supermercado
-from parametros import SECTOR, PROB_VISITAR_SECTOR, LIMITE_CAJA_AUTO
+from parametros import SECTOR, PROB_VISITAR_SECTOR, LIMITE_CAJA_AUTO, TIEMPO_DE_TRASLADO
 from math import ceil
 
 
 class Simulacion:
     def __init__(self, rng: np.random.Generator, activar_logs: bool = False,
-                 print_log_en_consola: bool = False, hora_inicio: int = 9, hora_cierre: int = 21,  cantidad_de_dias_a_simular: int = 1):
+                 print_log_en_consola: bool = False, hora_inicio: int = 9,
+                 hora_cierre: int = 21, cantidad_de_dias_a_simular: int = 1,
+                 nombre_log: str = "logs.txt"):
         self.env = simpy.Environment(initial_time=hora_inicio)
         self.rng = rng
         self.hora_inicio = hora_inicio
@@ -18,7 +20,7 @@ class Simulacion:
         self.print_log_en_consola = print_log_en_consola
         self.cantidad_de_dias_a_simular = cantidad_de_dias_a_simular
         self.dia = 1
-        self.log_path = Path("logs.txt")
+        self.log_path = Path(nombre_log)
 
         if self.activar_logs:
             self.log_file = self.log_path.open("w", encoding="utf-8")
@@ -51,21 +53,39 @@ class Simulacion:
             self.log_file = None
 
     def generar_personas_normales(self):
-        while 9 <= self.env.now <= 21:
+        while self.hora_inicio <= self.env.now < self.hora_cierre:
             hora_actual = int(self.env.now) % 24
             tasa_llegada = tasa_llegada_por_hora(hora_actual, "N")
+    
+            if tasa_llegada <= 0:
+                break
+    
             tiempo_entre_llegadas = self.rng.exponential(1 / tasa_llegada)
             yield self.env.timeout(tiempo_entre_llegadas)
+    
+            # Evita crear clientes si la llegada ocurrió después del cierre
+            if self.env.now > self.hora_cierre:
+                break
+    
             cliente_n = Cliente(self.env, "N")
             self.clientes.append(cliente_n)
             self.env.process(self.procesar_persona(cliente_n))
 
     def generar_personas_preferenciales(self):
-        while 9 <= self.env.now <= 21:
+        while self.hora_inicio <= self.env.now < self.hora_cierre:
             hora_actual = int(self.env.now) % 24
             tasa_llegada = tasa_llegada_por_hora(hora_actual, "P")
+    
+            if tasa_llegada <= 0:
+                break
+    
             tiempo_entre_llegadas = self.rng.exponential(1 / tasa_llegada)
             yield self.env.timeout(tiempo_entre_llegadas)
+    
+            # Evita crear clientes si la llegada ocurrió después del cierre
+            if self.env.now > self.hora_cierre:
+                break
+    
             cliente_p = Cliente(self.env, "P")
             self.clientes.append(cliente_p)
             self.env.process(self.procesar_persona(cliente_p))
@@ -222,12 +242,15 @@ class Simulacion:
 
         if len(cliente.sectores_a_visitar) == 0:
             self.registrar_evento(
-                f"Cliente {cliente.id_cliente} ({cliente.tipo}) no visitó ningún sector y se dirigió directamente a la caja.")
-            with self.almacen.sacar_items(1) as req:
-                yield req
-                self.almacen.cantidad_de_productos.append(
-                    (self.env.now, float(self.almacen.cuanto_stock())))
-                self.clientes.cantidad_items += 1
+                f"Cliente {cliente.id_cliente} ({cliente.tipo}) no visitó ningún sector, tomó 1 ítem de Almacén y se dirigió directamente a la caja.")
+        
+            yield self.almacen.sacar_items(1)
+            self.almacen.cantidad_de_productos.append(
+                (self.env.now, float(self.almacen.cuanto_stock()))
+            )
+        
+            cliente.cantidad_items += 1
+            cliente.utilidad += self.rng.uniform(150, 650)
 
         # Elección de caja según reglas: autoservicio solo si cantidad_items <= LIMITE_CAJA_AUTO
         caja, idx, cantidad = self.supermercado.elegir_caja(cliente, self.rng)
@@ -317,19 +340,23 @@ class Simulacion:
         self.supermercado.salir(cliente)
 
     def solicitud_reponedor(self, sector):
-        with self.supermercado.request_reponedor() as req:
-            yield req
-            reponedor = self.rng.choice(self.supermercado.reponedores)
-            self.registrar_evento(
-                f"Reponedor {reponedor.id_reponedor} asignado para reponer el sector {sector.nombre}.")
-            self.env.process(self.procesar_reponedor(reponedor, sector))
+        reponedor = yield self.supermercado.request_reponedor()
+    
+        self.registrar_evento(
+            f"Reponedor {reponedor.id_reponedor} asignado para reponer el sector {sector.nombre}."
+        )
+    
+        try:
+            yield self.env.process(self.procesar_reponedor(reponedor, sector))
+        finally:
+            yield self.supermercado.devolver_reponedor(reponedor)
 
     def procesar_reponedor(self, reponedor: Reponedor, sector: Sector):
 
         reponedor.estado = "llendo"
         reponedor.sector_actual = sector.nombre
 
-        yield self.env.timeout(1/6)  # Tiempo para llegar al sector
+        yield self.env.timeout(TIEMPO_DE_TRASLADO / 60)  # minutos a horas
         reponedor.estado = "esperando reponer"
 
         solicitudes = [sector.request_espacio() for _ in range(4)]
@@ -362,24 +389,35 @@ class Simulacion:
             self.registrar_evento(
                 f"Reponedor {reponedor.id_reponedor} terminó de reponer el sector {sector.nombre}. Cantidad repuesta: {cantidad_a_reponer}. Stock actual: {sector.cuanto_stock():.4f}.")
 
-    def calcular_producto_promedio(self, sector: Sector):
-        historial = sector.cantidad_de_productos
-        area_total = 0.0
-        tiempo_anterior = 0.0
-        nivel_anterior = historial[0][0]
-        for tiempo, nivel in historial:
-            if tiempo > 21:
-                break
-            tiempo_transcurrido = tiempo - tiempo_anterior
-            area_total += nivel_anterior * tiempo_transcurrido
-
-            tiempo_anterior = tiempo
-            nivel_anterior = nivel
-        if tiempo_anterior < 21:
-            tiempo_transcurrido = 21 - tiempo_anterior
-            area_total += nivel * tiempo_transcurrido
-
-        return area_total / 12  # Promedio diario
+        def calcular_producto_promedio(self, sector: Sector):
+            historial = sorted(sector.cantidad_de_productos, key=lambda x: x[0])
+        
+            inicio = self.hora_inicio
+            cierre = self.hora_cierre
+        
+            area_total = 0.0
+            tiempo_anterior = inicio
+        
+            # Al inicio del día se asume stock lleno
+            nivel_anterior = float(sector.stock.capacity)
+        
+            for tiempo, nivel in historial:
+                if tiempo < inicio:
+                    continue
+        
+                if tiempo > cierre:
+                    break
+        
+                tiempo_transcurrido = tiempo - tiempo_anterior
+                area_total += nivel_anterior * tiempo_transcurrido
+        
+                tiempo_anterior = tiempo
+                nivel_anterior = nivel
+        
+            if tiempo_anterior < cierre:
+                area_total += nivel_anterior * (cierre - tiempo_anterior)
+        
+            return area_total / (cierre - inicio)
 
     def recolectar_estadisticas(self):
         # Aquí se pueden recolectar estadísticas al finalizar la simulación
@@ -499,7 +537,14 @@ class Simulacion:
         self.env.process(self.generar_personas_normales())
         self.env.process(self.generar_personas_preferenciales())
         self.env.process(self.revisar_storage())
+    
         self.env.run()
+    
         estadisticas = self.recolectar_estadisticas()
-        self.crear_log_estadisticas(estadisticas)
+    
+        if self.activar_logs:
+            self.crear_log_estadisticas(estadisticas)
+    
         self.cerrar_logs()
+    
+        return estadisticas
