@@ -63,11 +63,14 @@ class Sector:
 
     # Fila para la balanza (si aplica)
     def sacar_items(self, cantidad: int):
-        cantidad_hay = self.cuanto_stock()
-        if cantidad > cantidad_hay:
-            # Devuelve lo que hay, aunque no sea suficiente
-            return self.stock.get(cantidad_hay)
-        return self.stock.get(cantidad)
+        cantidad_hay = int(self.cuanto_stock())
+        cantidad_a_sacar = min(int(cantidad), cantidad_hay)
+    
+        # Si no hay stock, no se debe pedir self.stock.get(0)
+        if cantidad_a_sacar <= 0:
+            return self.env.timeout(0)
+    
+        return self.stock.get(cantidad_a_sacar)
 
     def reponer_items(self, cantidad: int):
         """Devuelve el evento para reponer ítems al stock."""
