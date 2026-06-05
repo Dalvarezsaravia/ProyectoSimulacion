@@ -56,17 +56,17 @@ class Simulacion:
         while self.hora_inicio <= self.env.now < self.hora_cierre:
             hora_actual = int(self.env.now) % 24
             tasa_llegada = tasa_llegada_por_hora(hora_actual, "N")
-    
+
             if tasa_llegada <= 0:
                 break
-    
+
             tiempo_entre_llegadas = self.rng.exponential(1 / tasa_llegada)
             yield self.env.timeout(tiempo_entre_llegadas)
-    
+
             # Evita crear clientes si la llegada ocurrió después del cierre
             if self.env.now >= self.hora_cierre:
                 break
-    
+
             cliente_n = Cliente(self.env, "N")
             self.clientes.append(cliente_n)
             self.env.process(self.procesar_persona(cliente_n))
@@ -75,17 +75,17 @@ class Simulacion:
         while self.hora_inicio <= self.env.now < self.hora_cierre:
             hora_actual = int(self.env.now) % 24
             tasa_llegada = tasa_llegada_por_hora(hora_actual, "P")
-    
+
             if tasa_llegada <= 0:
                 break
-    
+
             tiempo_entre_llegadas = self.rng.exponential(1 / tasa_llegada)
             yield self.env.timeout(tiempo_entre_llegadas)
-    
+
             # Evita crear clientes si la llegada ocurrió después del cierre
             if self.env.now >= self.hora_cierre:
                 break
-    
+
             cliente_p = Cliente(self.env, "P")
             self.clientes.append(cliente_p)
             self.env.process(self.procesar_persona(cliente_p))
@@ -104,7 +104,7 @@ class Simulacion:
     def calcular_cantidad_real_a_comprar(self, sector: Sector, cantidad_deseada: int) -> int:
         stock_disponible = int(sector.cuanto_stock())
         return max(0, min(int(cantidad_deseada), stock_disponible))
-    
+
     def procesar_persona(self, cliente: Cliente):
         if not self.supermercado.entrar(cliente):
             self.registrar_evento(
@@ -132,26 +132,26 @@ class Simulacion:
                         mean=2.6, sigma=0.5) / 60
                     yield self.env.timeout(tiempo_espera)
                     cantidad_deseada = self.rng.negative_binomial(n=4, p=0.25)
-                    
+
                     cantidad_items = self.calcular_cantidad_real_a_comprar(
                         self.almacen,
                         cantidad_deseada
                     )
-                    
+
                     if cantidad_items > 0:
                         yield self.almacen.sacar_items(cantidad_items)
-                    
+
                     self.almacen.cantidad_de_productos.append(
                         (self.env.now, float(self.almacen.cuanto_stock()))
                     )
-                    
+
                     cliente.cantidad_items += cantidad_items
-                    
+
                     utilidad = 0
                     for _ in range(cantidad_items):
                         utilidad += self.rng.uniform(150, 650)
                     cliente.utilidad += utilidad
-                    
+
                     if cantidad_items < cantidad_deseada:
                         self.registrar_evento(
                             f"Cliente {cliente.id_cliente} ({cliente.tipo}) quiso comprar {cantidad_deseada} ítems en Almacén, pero solo pudo sacar {cantidad_items}. Disponibilidad actual: {self.almacen.cuanto_stock():.4f}."
@@ -215,7 +215,7 @@ class Simulacion:
 
                         utilidad = 0
                         for _ in range(cantidad_items):
-                            utilidad += self.rng.triangular(20, 150, 300)
+                            utilidad += self.rng.triangular(50, 350, 1800)
                         cliente.utilidad += utilidad
 
                     cliente.cantidad_items += cantidad_items
@@ -229,7 +229,6 @@ class Simulacion:
                             f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Verdulería con {cantidad_items} ítems. Disponibilidad actual: {self.verduleria.cuanto_stock():.4f}."
                         )
 
-            
             elif sector == "panaderia":
                 tiempo_llegada_al_sector = self.env.now
                 with self.panaderia.request_espacio() as req:
@@ -243,29 +242,29 @@ class Simulacion:
                         left=3, mode=5, right=10) / 60
                     yield self.env.timeout(tiempo_espera)
                     cantidad_deseada = self.rng.poisson(lam=2) + 1
-                    
+
                     cantidad_items = self.calcular_cantidad_real_a_comprar(
                         self.panaderia,
                         cantidad_deseada
                     )
-                    
+
                     if cantidad_items > 0:
                         yield self.panaderia.sacar_items(cantidad_items)
-                    
+
                     self.panaderia.cantidad_de_productos.append(
                         (self.env.now, float(self.panaderia.cuanto_stock()))
                     )
-                    
+
                     if cantidad_items > 0:
                         tiempo_llegada_a_balanza = self.env.now
-                    
+
                         with self.panaderia.request_balanza() as req_balanza:
                             yield req_balanza
-                    
+
                             cliente.tiempo_espera_balanza["panaderia"] = (
                                 self.env.now - tiempo_llegada_a_balanza
                             )
-                    
+
                             for _ in range(cantidad_items):
                                 tiempo_en_balanza = self.rng.triangular(
                                     left=10,
@@ -273,13 +272,13 @@ class Simulacion:
                                     right=30
                                 ) / 3600
                                 yield self.env.timeout(tiempo_en_balanza)
-                    
+
                             self.registrar_evento(
                                 f"Cliente {cliente.id_cliente} ({cliente.tipo}) terminó de pesar en Panadería."
                             )
-                    
+
                     cliente.cantidad_items += cantidad_items
-                    
+
                     utilidad = 0
                     for _ in range(cantidad_items):
                         utilidad += self.rng.lognormal(
@@ -287,7 +286,7 @@ class Simulacion:
                             sigma=0.4245
                         )
                     cliente.utilidad += utilidad
-                    
+
                     if cantidad_items < cantidad_deseada:
                         self.registrar_evento(
                             f"Cliente {cliente.id_cliente} ({cliente.tipo}) quiso comprar {cantidad_deseada} ítems en Panadería, pero solo pudo sacar {cantidad_items}. Disponibilidad actual: {self.panaderia.cuanto_stock():.4f}."
@@ -313,14 +312,14 @@ class Simulacion:
                         self.refrigerados,
                         cantidad_deseada
                     )
-                    
+
                     if cantidad_items > 0:
                         yield self.refrigerados.sacar_items(cantidad_items)
-                    
+
                     self.refrigerados.cantidad_de_productos.append(
                         (self.env.now, float(self.refrigerados.cuanto_stock()))
                     )
-                    
+
                     if cantidad_items < cantidad_deseada:
                         self.registrar_evento(
                             f"Cliente {cliente.id_cliente} ({cliente.tipo}) quiso comprar {cantidad_deseada} ítems en Refrigerados, pero solo pudo sacar {cantidad_items}. Disponibilidad actual: {self.refrigerados.cuanto_stock():.4f}."
@@ -329,7 +328,7 @@ class Simulacion:
                         self.registrar_evento(
                             f"Cliente {cliente.id_cliente} ({cliente.tipo}) salió del sector Refrigerados con {cantidad_items} ítems. Disponibilidad actual: {self.refrigerados.cuanto_stock():.4f}."
                         )
-                    
+
                     cliente.cantidad_items += cantidad_items
 
                     utilidad = 0
@@ -340,12 +339,12 @@ class Simulacion:
         if len(cliente.sectores_a_visitar) == 0:
             self.registrar_evento(
                 f"Cliente {cliente.id_cliente} ({cliente.tipo}) no visitó ningún sector, tomó 1 ítem de Almacén y se dirigió directamente a la caja.")
-        
+
             yield self.almacen.sacar_items(1)
             self.almacen.cantidad_de_productos.append(
                 (self.env.now, float(self.almacen.cuanto_stock()))
             )
-        
+
             cliente.cantidad_items += 1
             cliente.utilidad += self.rng.uniform(150, 650)
 
@@ -372,7 +371,7 @@ class Simulacion:
                 if cliente.tipo == "P":
                     tiempo_pago = self.rng.weibull(a=1.2) * 190 / 3600
                 else:
-                    tiempo_pago = self.rng.exponential(scale=1/60) / 3600
+                    tiempo_pago = self.rng.exponential(scale=60) / 3600
                 yield self.env.timeout(tiempo_pago)
                 self.registrar_evento(
                     f"Cliente {cliente.id_cliente} ({cliente.tipo}) terminó de pagar en caja automática.")
@@ -398,7 +397,7 @@ class Simulacion:
                 if cliente.tipo == "P":
                     tiempo_pago = self.rng.weibull(a=1.2) * 190 / 3600
                 else:
-                    tiempo_pago = self.rng.exponential(scale=1/60) / 3600
+                    tiempo_pago = self.rng.exponential(scale=60) / 3600
                 yield self.env.timeout(tiempo_pago)
                 self.registrar_evento(
                     f"Cliente {cliente.id_cliente} ({cliente.tipo}) terminó de pagar en caja preferencial {idx}.")
@@ -424,7 +423,7 @@ class Simulacion:
                 if cliente.tipo == "P":
                     tiempo_pago = self.rng.weibull(a=1.2) * 190 / 3600
                 else:
-                    tiempo_pago = self.rng.exponential(scale=1/60) / 3600
+                    tiempo_pago = self.rng.exponential(scale=60) / 3600
                 yield self.env.timeout(tiempo_pago)
                 self.registrar_evento(
                     f"Cliente {cliente.id_cliente} ({cliente.tipo}) terminó de pagar en caja normal {idx}.")
@@ -438,11 +437,11 @@ class Simulacion:
 
     def solicitud_reponedor(self, sector):
         reponedor = yield self.supermercado.request_reponedor()
-    
+
         self.registrar_evento(
             f"Reponedor {reponedor.id_reponedor} asignado para reponer el sector {sector.nombre}."
         )
-    
+
         try:
             yield self.env.process(self.procesar_reponedor(reponedor, sector))
         finally:
@@ -471,7 +470,7 @@ class Simulacion:
             elif sector.nombre == "refrigerados":
                 tiempo_reponer = self.rng.weibull(a=1.5) * 13.3 / 60
             elif sector.nombre == "panaderia":
-                tiempo_reponer = self.rng.exponential(scale=1/8) / 60
+                tiempo_reponer = self.rng.exponential(scale=8) / 60
 
             yield self.env.timeout(tiempo_reponer)
 
@@ -488,32 +487,32 @@ class Simulacion:
 
     def calcular_producto_promedio(self, sector: Sector):
         historial = sorted(sector.cantidad_de_productos, key=lambda x: x[0])
-    
+
         inicio = self.hora_inicio
         cierre = self.hora_cierre
-    
+
         area_total = 0.0
         tiempo_anterior = inicio
-    
+
         # Al inicio del día se asume stock lleno
         nivel_anterior = float(sector.stock.capacity)
-    
+
         for tiempo, nivel in historial:
             if tiempo < inicio:
                 continue
-    
+
             if tiempo > cierre:
                 break
-    
+
             tiempo_transcurrido = tiempo - tiempo_anterior
             area_total += nivel_anterior * tiempo_transcurrido
-    
+
             tiempo_anterior = tiempo
             nivel_anterior = nivel
-    
+
         if tiempo_anterior < cierre:
             area_total += nivel_anterior * (cierre - tiempo_anterior)
-    
+
         return area_total / (cierre - inicio)
 
     def recolectar_estadisticas(self):
@@ -573,8 +572,13 @@ class Simulacion:
         avg_productos_refrigerados = self.calcular_producto_promedio(
             self.refrigerados)
 
+        gastos = 14 * 27000  # Costo de 14 empleados a $27.000 cada uno
+        # Costo por minuto extra de apertura
+        tiempo_extra = int(
+            (max(0, self.env.now - self.hora_cierre)) * 60) * 150
+
         return {
-            "utilidades totales": utilidades,
+            "utilidades totales": utilidades - gastos - tiempo_extra,
             "Promedio productos verdureria": avg_productos_verduleria,
             "Promedio productos panaderia": avg_productos_panaderia,
             "Promedio productos almacen": avg_productos_almacen,
@@ -634,14 +638,14 @@ class Simulacion:
         self.env.process(self.generar_personas_normales())
         self.env.process(self.generar_personas_preferenciales())
         self.env.process(self.revisar_storage())
-    
+
         self.env.run()
-    
+
         estadisticas = self.recolectar_estadisticas()
-    
+
         if self.activar_logs:
             self.crear_log_estadisticas(estadisticas)
-    
+
         self.cerrar_logs()
-    
+
         return estadisticas

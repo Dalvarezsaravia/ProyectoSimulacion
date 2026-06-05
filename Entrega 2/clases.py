@@ -65,11 +65,11 @@ class Sector:
     def sacar_items(self, cantidad: int):
         cantidad_hay = int(self.cuanto_stock())
         cantidad_a_sacar = min(int(cantidad), cantidad_hay)
-    
+
         # Si no hay stock, no se debe pedir self.stock.get(0)
         if cantidad_a_sacar <= 0:
             return self.env.timeout(0)
-    
+
         return self.stock.get(cantidad_a_sacar)
 
     def reponer_items(self, cantidad: int):
@@ -125,11 +125,11 @@ class Supermercado:
         self.cajas_normales = [simpy.PriorityResource(env, capacity=1)
                                for _ in range(CAJAS_POR_TIPO["normal"])]
         self.reponedores = [Reponedor(self.env), Reponedor(self.env)]
-        
+
         self.reponedores_disponibles = simpy.Store(
             env, capacity=len(self.reponedores)
         )
-        
+
         for reponedor in self.reponedores:
             self.reponedores_disponibles.put(reponedor)
         self.tiempo_espera_caja_auto = []
@@ -159,12 +159,18 @@ class Supermercado:
 
     def request_reponedor(self):
         return self.reponedores_disponibles.get()
-    
+
     def devolver_reponedor(self, reponedor):
         return self.reponedores_disponibles.put(reponedor)
 
-    def _cola_len(self, recurso: simpy.resources.resource.Resource) -> int:
-        return len(recurso.queue) + getattr(recurso, 'count', 0)
+    def _cola_len(self, recurso: simpy.resources.resource.Resource, es_autoservicio: bool = False) -> int:
+        if es_autoservicio:
+            if len(recurso.queue) == 0 and recurso.count < recurso.capacity:
+                return 0
+            else:
+                return len(recurso.queue) + 1
+        else:
+            return len(recurso.queue) + recurso.count
 
     def elegir_caja(self, cliente: Cliente, rng: np.random.Generator):
         candidatos = []
@@ -172,10 +178,10 @@ class Supermercado:
         if cliente.cantidad_items <= LIMITE_CAJA_AUTO:
             if cliente.tipo == "P":
                 candidatos.append(
-                    ("auto", None, self._cola_len(self.caja_auto) / 2))
+                    ("auto", None, self._cola_len(self.caja_auto, True) / 2))
             else:
                 candidatos.append(
-                    ("auto", None, self._cola_len(self.caja_auto) / 3))
+                    ("auto", None, self._cola_len(self.caja_auto, True) / 3))
 
         for i, recurso in enumerate(self.cajas_preferenciales):
             candidatos.append(
