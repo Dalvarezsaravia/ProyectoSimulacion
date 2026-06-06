@@ -32,9 +32,9 @@ class Cliente:
         self.sectores_a_visitar = []
         self.cantidad_items = 0
         self.utilidad = 0
-        self.tiempo_espera_sector = {"almacen": 0.0, "verduleria": 0.0,
-                                     "panaderia": 0.0, "refrigerados": 0.0}
-        self.tiempo_espera_balanza = {"verduleria": 0.0, "panaderia": 0.0}
+        self.tiempo_espera_sector = {"almacen": None, "verduleria": None,
+                                     "panaderia": None, "refrigerados": None}
+        self.tiempo_espera_balanza = {"verduleria": None, "panaderia": None}
 
         self.nivel_prioridad = CLIENTE_ORDEN[tipo]
 
@@ -52,6 +52,10 @@ class Sector:
         self.solicitud_de_reponer = False
 
         self.cantidad_de_productos = []
+
+        self.cantidad_clientes_visitados = 0
+
+        self.utilidad_total = 0
 
     # Cliente espacio (request/release)
     def request_espacio(self):
@@ -136,9 +140,16 @@ class Supermercado:
         self.tiempo_espera_caja_preferencial = []
         self.tiempo_espera_caja_normal = []
 
+        self.caja_clientes_auto = 0
+        self.caja_clientes_preferencial = 0
+        self.caja_clientes_normal = 0
+
+        self.clientes_rechazados_por_capacidad = 0
+
     def entrar(self, cliente: Cliente) -> bool:
         if self.clientes_en_tienda >= self.capacidad_maxima:
             cliente.estado = "rechazado"
+            self.clientes_rechazados_por_capacidad += 1
             return False
         self.clientes_en_tienda += 1
         return True
@@ -172,7 +183,7 @@ class Supermercado:
         else:
             return len(recurso.queue) + recurso.count
 
-    def elegir_caja(self, cliente: Cliente, rng: np.random.Generator):
+    def elegir_caja(self, cliente: Cliente, rng: np.random.Generator, registrar_evento):
         candidatos = []
 
         if cliente.cantidad_items <= LIMITE_CAJA_AUTO:
@@ -195,6 +206,8 @@ class Supermercado:
         candidatos.sort(key=lambda x: x[2])
         min_cola = candidatos[0][2]
         mejores = [c for c in candidatos if c[2] == min_cola]
+        registrar_evento(
+            f"Candidatos del cliente {cliente.id_cliente} ({cliente.tipo}) Cantidad {cliente.cantidad_items}: {candidatos}. Los mejores son: {mejores}")
 
         # Desempates explícitos según tipo de cliente
         if cliente.tipo == "P":
@@ -217,11 +230,14 @@ class Supermercado:
                 return mejores[0]
             else:
                 cajas_normales = []
+                cajas_preferenciales = []
                 for caja in mejores:
                     if caja[0] == "normal":
                         cajas_normales.append(caja)
                     elif caja[0] == "auto":
                         return caja
+                    elif caja[0] == "preferencial":
+                        cajas_preferenciales.append(caja)
                 if len(cajas_normales) > 0:
                     idx = int(rng.integers(0, len(cajas_normales)))
                     return cajas_normales[idx]
