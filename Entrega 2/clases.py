@@ -45,11 +45,11 @@ class Sector:
         self.env = env
         self.nombre = nombre
         self.clientes = simpy.Resource(env, capacity=capacidad_de_cliente)
-        self.stock = simpy.Container(
-            env, init=capacidad_items, capacity=capacidad_items)
+        self.stock = capacidad_items
         self.balanzas = simpy.Resource(
             env, capacity=balanzas) if balanzas > 0 else None
         self.solicitud_de_reponer = False
+        self.stock_maximo = capacidad_items
 
         self.cantidad_de_productos = []
 
@@ -67,22 +67,19 @@ class Sector:
 
     # Fila para la balanza (si aplica)
     def sacar_items(self, cantidad: int):
-        cantidad_hay = int(self.cuanto_stock())
-        cantidad_a_sacar = min(int(cantidad), cantidad_hay)
 
-        # Si no hay stock, no se debe pedir self.stock.get(0)
-        if cantidad_a_sacar <= 0:
-            return self.env.timeout(0)
-
-        return self.stock.get(cantidad_a_sacar)
+        if self.stock < cantidad:
+            cantidad = self.stock
+        self.stock -= cantidad
+        return cantidad
 
     def reponer_items(self, cantidad: int):
         """Devuelve el evento para reponer ítems al stock."""
 
-        return self.stock.put(cantidad)
+        self.stock += cantidad
 
     def cuanto_stock(self) -> float:
-        return float(self.stock.level)
+        return float(self.stock)
 
     # Balanzas (si aplica)
     def request_balanza(self):
@@ -123,10 +120,11 @@ class Supermercado:
         self.capacidad_maxima = C_MAX
         self.clientes_en_tienda = 0
 
-        self.caja_auto = simpy.Resource(env, capacity=CAJAS_POR_TIPO["auto"])
-        self.cajas_preferenciales = [simpy.PriorityResource(env, capacity=1)
+        self.caja_auto = simpy.Resource(
+            self.env, capacity=CAJAS_POR_TIPO["auto"])
+        self.cajas_preferenciales = [simpy.PriorityResource(self.env, capacity=1)
                                      for _ in range(CAJAS_POR_TIPO["preferencial"])]
-        self.cajas_normales = [simpy.PriorityResource(env, capacity=1)
+        self.cajas_normales = [simpy.PriorityResource(self.env, capacity=1)
                                for _ in range(CAJAS_POR_TIPO["normal"])]
         self.reponedores = [Reponedor(self.env), Reponedor(self.env)]
 

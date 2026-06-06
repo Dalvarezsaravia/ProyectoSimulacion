@@ -5,7 +5,7 @@ import csv
 
 
 N_REPLICAS = 200
-SEED_BASE = 240105
+SEED_BASE = 2401050808
 
 
 def correr_replica(numero_replica: int, seed: int, activar_logs: bool = False):
@@ -47,8 +47,10 @@ def guardar_resultados_csv(resultados, nombre_archivo="metricas_replicas.csv"):
 
 def main():
     resultados = []
+    print(f"Iniciando simulación con {N_REPLICAS} réplicas...")
 
     for i in range(N_REPLICAS):
+        print(f"Corriendo réplica {i + 1} de {N_REPLICAS}")
         numero_replica = i + 1
         seed = SEED_BASE + i
 
