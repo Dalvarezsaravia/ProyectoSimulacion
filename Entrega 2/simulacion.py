@@ -102,7 +102,7 @@ class Simulacion:
         while 9 <= self.env.now <= 21:
             yield self.env.timeout(0.5)
             if 9 < self.env.now < 21:
-                for sector in [self.almacen, self.verduleria, self.panaderia, self.refrigerados]:
+                for sector in [self.verduleria, self.panaderia, self.almacen, self.refrigerados]:
                     if sector.cuanto_stock() <= sector.stock_maximo * 0.7 and sector.solicitud_de_reponer is False:
                         sector.solicitud_de_reponer = True
                         self.registrar_evento(
