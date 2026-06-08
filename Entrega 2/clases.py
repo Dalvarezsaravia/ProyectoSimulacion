@@ -65,7 +65,9 @@ class Sector:
         """Libera un request previamente adquirido."""
         self.clientes.release(req)
 
-    # Fila para la balanza (si aplica)
+    # Funcion que permite sacar items del stock del sector, considerando la cantidad deseada y el stock disponible.
+    # Si la cantidad deseada es mayor al stock disponible, se ajusta a lo que queda en stock.
+    # Luego se actualiza el stock restando la cantidad real sacada y se devuelve esa cantidad real para que el cliente pueda comprarla.
     def sacar_items(self, cantidad: int):
 
         if self.stock < cantidad:
@@ -86,6 +88,8 @@ class Sector:
         if self.balanzas is None:
             raise RuntimeError(f"Sector {self.nombre} no tiene balanzas")
         return self.balanzas.request()
+
+# Sectores específicos de la clase Sector, cada uno con sus propias características de capacidad y balanzas (si aplica)
 
 
 class Almacen(Sector):
@@ -134,6 +138,7 @@ class Supermercado:
 
         for reponedor in self.reponedores:
             self.reponedores_disponibles.put(reponedor)
+        # Para guardar las estadisticas
         self.tiempo_espera_caja_auto = []
         self.tiempo_espera_caja_preferencial = []
         self.tiempo_espera_caja_normal = []
@@ -173,6 +178,7 @@ class Supermercado:
         return self.reponedores_disponibles.put(reponedor)
 
     def _cola_len(self, recurso: simpy.resources.resource.Resource, es_autoservicio: bool = False) -> int:
+        # Funcion que devuelve la cantidad de personas en cola para un recurso dado, considerando el caso especial de las cajas de autoservicio
         if es_autoservicio:
             if len(recurso.queue) == 0 and recurso.count < recurso.capacity:
                 return 0
@@ -183,6 +189,8 @@ class Supermercado:
 
     def elegir_caja(self, cliente: Cliente, rng: np.random.Generator, registrar_evento):
         candidatos = []
+        # Funcion que devuelve una tupla con el tipo de caja, el indice (si aplica) y la cantidad de personas en cola para cada caja disponible,
+        # considerando las reglas de prioridad y los tipos de cliente. Luego ordena por la cantidad de personas en cola y aplica desempates según el tipo de cliente.
 
         if cliente.cantidad_items <= LIMITE_CAJA_AUTO:
             if cliente.tipo == "P":

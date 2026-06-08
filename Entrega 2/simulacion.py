@@ -35,6 +35,7 @@ class Simulacion:
         self.refrigerados = Refrigerados(self.env)
         self.supermercado = Supermercado(self.env)
 
+    # Funcion para registrar eventos con formato de tiempo y mensaje, tanto en archivo como en consola.
     def registrar_evento(self, mensaje: str):
         dia = int(self.env.now // 24) + 1
         hora = int(self.env.now % 24)
@@ -52,6 +53,8 @@ class Simulacion:
             self.log_file.close()
             self.log_file = None
 
+    # Funcion generadora de clientes normales, que se ejecuta durante el horario de apertura del supermercado.
+    # Utiliza una tasa de llegada variable según la hora del día y el tipo de cliente.
     def generar_personas_normales(self):
         while self.hora_inicio <= self.env.now < self.hora_cierre:
             hora_actual = int(self.env.now) % 24
@@ -72,6 +75,8 @@ class Simulacion:
             self.clientes.append(cliente_n)
             self.env.process(self.procesar_persona(cliente_n))
 
+    # Funcion generadora de clientes preferenciales, que se ejecuta durante el horario de apertura del supermercado.
+    # Utiliza una tasa de llegada variable según la hora del día y el tipo de cliente.
     def generar_personas_preferenciales(self):
         while self.hora_inicio <= self.env.now < self.hora_cierre:
             hora_actual = int(self.env.now) % 24
@@ -92,6 +97,7 @@ class Simulacion:
             self.clientes.append(cliente_p)
             self.env.process(self.procesar_persona(cliente_p))
 
+    # Funcion que revisa periódicamente el nivel de stock de cada sector y solicita reponedores si el stock cae por debajo del 70% de su capacidad máxima.
     def revisar_storage(self):
         while 9 <= self.env.now <= 21:
             yield self.env.timeout(0.5)
@@ -103,17 +109,20 @@ class Simulacion:
                             f"Stock del sector {sector.nombre} bajo. Cantidad: {sector.cuanto_stock():.4f}. Reponiendo...")
                         self.env.process(self.solicitud_reponedor(sector))
 
+    # Funcion que permite calcular la cantidad real de items que un cliente puede comprar en un sector, considerando la cantidad deseada y el stock disponible en ese momento.
+    # Para evitar cualquier error o inconsistencia, se asegura de que la cantidad real a comprar no sea negativa ni exceda el stock disponible.
     def calcular_cantidad_real_a_comprar(self, sector: Sector, cantidad_deseada: int) -> int:
         stock_disponible = int(sector.cuanto_stock())
         return max(0, min(int(cantidad_deseada), stock_disponible))
 
+    # FUncion que procesa a cada cliente desde su llegada al supermercado, pasando por los sectores que desea visitar, hasta su salida después de pagar en caja.
     def procesar_persona(self, cliente: Cliente):
         if not self.supermercado.entrar(cliente):
             self.registrar_evento(
                 f"Cliente {cliente.id_cliente} ({cliente.tipo}) rechazado por capacidad al intentar entrar al supermercado.")
             return
 
-        # formar lista
+        # formar lista de los sectores que el cliente va a visitar, según las probabilidades definidas en PROB_VISITAR_SECTOR
         sectores = []
         for s in SECTOR:
             if self.rng.random() < PROB_VISITAR_SECTOR[s]:
@@ -123,6 +132,8 @@ class Simulacion:
         self.registrar_evento(
             f"Cliente {cliente.id_cliente} ({cliente.tipo}) entró al supermercado. Sectores a visitar en el siguiente orden: {cliente.sectores_a_visitar}")
 
+        # Visitar cada sector en el orden definido, registrando tiempos de espera, cantidad de items comprados,
+        # utilidad generada y eventos relevantes como falta de stock o tiempos de espera en balanza.
         for sector in cliente.sectores_a_visitar:
             if sector == "almacen":
                 tiempo_llegada_al_sector = self.env.now
@@ -196,6 +207,10 @@ class Simulacion:
                     if cantidad_items > 0:
                         tiempo_llegada_a_balanza = self.env.now
 
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) se dirigió a la balanza en Verdulería con {cantidad_items} ítems."
+                        )
+
                         with self.verduleria.request_balanza() as req_balanza:
                             yield req_balanza
 
@@ -253,6 +268,10 @@ class Simulacion:
 
                     if cantidad_items > 0:
                         tiempo_llegada_a_balanza = self.env.now
+
+                        self.registrar_evento(
+                            f"Cliente {cliente.id_cliente} ({cliente.tipo}) se dirigió a la balanza en Panadería con {cantidad_items} ítems."
+                        )
 
                         with self.panaderia.request_balanza() as req_balanza:
                             yield req_balanza
@@ -325,6 +344,7 @@ class Simulacion:
                     cliente.utilidad += utilidad
                     self.refrigerados.utilidad_total += utilidad
 
+        # Caso donde el cliente no visitó ningún sector, se le asigna 1 ítem del Almacén para que pueda pasar por caja y generar utilidad.
         if len(cliente.sectores_a_visitar) == 0:
             self.registrar_evento(
                 f"Cliente {cliente.id_cliente} ({cliente.tipo}) no visitó ningún sector, tomó 1 ítem de Almacén y se dirigió directamente a la caja.")
@@ -344,6 +364,8 @@ class Simulacion:
         caja, idx, cantidad = self.supermercado.elegir_caja(
             cliente, self.rng, self.registrar_evento)
         llegada_caja = self.env.now
+
+        # Procesamiento de pago en la caja elegida, con tiempos de espera y pago según el tipo de cliente y cantidad de items.
         if caja == "auto":
             self.registrar_evento(
                 f"Cliente {cliente.id_cliente} ({cliente.tipo}) eligió caja automática.")
@@ -422,6 +444,8 @@ class Simulacion:
         cliente.tiempo_de_permanencia = cliente.hora_salida - cliente.hora_llegada
         self.supermercado.salir(cliente)
 
+    # Funcion que maneja la solicitud de un reponedor para reponer un sector específico,
+    # incluyendo la asignación del reponedor, el proceso de reposición y la liberación del recurso al finalizar.
     def solicitud_reponedor(self, sector):
         reponedor = yield self.supermercado.request_reponedor()
 
@@ -434,6 +458,8 @@ class Simulacion:
         finally:
             yield self.supermercado.devolver_reponedor(reponedor)
 
+    # Funcion que simula el proceso de reposición de un sector por parte de un reponedor, incluyendo tiempos de traslado,
+    # tiempo de reposición según el sector, cantidad a reponer basada en una proporción del stock máximo y la actualización del stock y eventos relacionados.
     def procesar_reponedor(self, reponedor: Reponedor, sector: Sector):
 
         reponedor.estado = "llendo"
@@ -479,6 +505,7 @@ class Simulacion:
             self.registrar_evento(
                 f"Reponedor {reponedor.id_reponedor} terminó de reponer el sector {sector.nombre}. Cantidad repuesta: {cantidad_real_a_reponer}. Stock actual: {sector.cuanto_stock():.4f}.")
 
+    # Función que calcula el producto promedio en un sector durante el horario de apertura.
     def calcular_producto_promedio(self, sector: Sector):
         historial = sorted(sector.cantidad_de_productos, key=lambda x: x[0])
 
