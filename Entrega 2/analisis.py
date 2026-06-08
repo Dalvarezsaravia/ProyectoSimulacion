@@ -68,7 +68,7 @@ def aplicacion_metricas(df):
         print(f"{s.capitalize():<12}: {media:>8.2f} +/- {largo_medio:>5.2f}  IC: [{inf:>7.2f}, {sup:>7.2f}]")
 
     # ii) Tiempos de espera
-    print("\n ii) Tiempos de espera promedio (segundos)")
+    print("\n ii) Tiempos de espera promedio (minutos)")
     columnas_espera = [
         "Promedio tiempo espera almacen",
         "Promedio tiempo espera verduleria",
@@ -86,7 +86,7 @@ def aplicacion_metricas(df):
         print(f"{nombre_limpio:<18}: {media:>,.4f} +/- {largo_medio:>,.4f}  IC: [{inf:>,.2f}, {sup:>,.2f}]")
 
     # iii) Tiempos de permanencia por tipo
-    print("\niii) Promedio de tiempo de permanencia por tipo (segundos)")
+    print("\niii) Promedio de tiempo de permanencia por tipo (minutos)")
     columnas_permanencia = [
         "Promedio tiempo de permanencia clientes normales",
         "Promedio tiempo de permanencia clientes preferenciales"
